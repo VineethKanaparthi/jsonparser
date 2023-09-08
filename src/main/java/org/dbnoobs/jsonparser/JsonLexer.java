@@ -7,20 +7,19 @@ import java.util.List;
 
 public class JsonLexer {
 
-    public List<Object> lex(String json) {
+    public static List<JsonToken> lex(String json) {
         int len = json.length();
         int i = 0;
-        List<Object> tokens = new ArrayList<>();
+        List<JsonToken> tokens = new ArrayList<>();
         while(i < len){
-            String token = null;
-            token = lexString(json, i);
+            String token = lexString(json, i);
             if(token != null) {
                 i += (token.length()+2);
-                tokens.add(token);
+                tokens.add(JsonToken.getToken(token, TokenType.STRING));
                 continue;
             }
             token = lexNumber(json, i);
-            Object extractedNumber = convertToNumber(token);
+            JsonToken extractedNumber = convertToNumber(token);
             if(extractedNumber != null) {
                 i += (token.length());
                 tokens.add(extractedNumber);
@@ -29,13 +28,13 @@ public class JsonLexer {
             Boolean extractedBoolean = lexBoolean(json, i);
             if(extractedBoolean != null) {
                 i += ((extractedBoolean)?4:5);
-                tokens.add(extractedBoolean);
+                tokens.add(JsonToken.getToken(extractedBoolean, TokenType.BOOLEAN));
                 continue;
             }
             token = lexNull(json, i);
             if(token != null) {
                 i += (token.length());
-                tokens.add(token);
+                tokens.add(JsonToken.getToken(token, TokenType.NULL));
                 continue;
             }
 
@@ -58,7 +57,7 @@ public class JsonLexer {
             for(char c: JsonConstants.JSON_SYNTAX){
                 if(c == json.charAt(i)){
                     isJsonSyntax = true;
-                    tokens.add(c);
+                    tokens.add(JsonToken.getToken(c, TokenType.CONSTANT));
                     break;
                 }
             }
@@ -72,7 +71,7 @@ public class JsonLexer {
         return tokens;
     }
 
-    public Object convertToNumber(String token) {
+    public static JsonToken convertToNumber(String token) {
         if(token == null || token.isEmpty()){
             return null;
         }
@@ -89,25 +88,25 @@ public class JsonLexer {
         }
         try{
             if(periodExists){
-                return new BigDecimal(token);
+                return JsonToken.getToken(new BigDecimal(token),TokenType.BIGDECIMAL) ;
             }else if(exponentExists) {
                 try{
-                    return new BigDecimal(token).longValueExact();
+                    return JsonToken.getToken(new BigDecimal(token).longValueExact(), TokenType.LONG);
                 }catch (Exception e1){
                     try{
-                        return new BigDecimal(token).toBigIntegerExact();
+                        return JsonToken.getToken(new BigDecimal(token).toBigIntegerExact(), TokenType.BIGINTEGER);
                     }catch (Exception e2){
-                            return new BigDecimal(token);
+                            return JsonToken.getToken(new BigDecimal(token), TokenType.BIGDECIMAL);
                     }
                 }
             }else{
                 try{
-                    return Integer.parseInt(token);
+                    return JsonToken.getToken(Integer.parseInt(token), TokenType.INT);
                 }catch (Exception e1){
                     try{
-                        return Long.parseLong(token);
+                        return JsonToken.getToken(Long.parseLong(token), TokenType.LONG);
                     }catch (Exception e2){
-                        return new BigInteger(token);
+                        return JsonToken.getToken(new BigInteger(token), TokenType.BIGINTEGER);
                     }
                 }
             }
@@ -116,7 +115,7 @@ public class JsonLexer {
         }
     }
 
-    private String lexString(final String json, int i){
+    private static String lexString(final String json, int i){
         if(json == null || json.isEmpty() || json.charAt(i) != JsonConstants.JSON_QUOTE) {
             return null;
         }
@@ -134,7 +133,6 @@ public class JsonLexer {
 
     /**
      * postgres documentation defines number as
-     *
      * digits
      * digits.[digits][e[+-]digits]
      * [digits].digits[e[+-]digits]
@@ -149,7 +147,7 @@ public class JsonLexer {
      * @param i - index of the string to start lexing
      * @return token(substring of json string) that is a number defined by postgres doc
      */
-    public String lexNumber(final String json, int i){
+    public static String lexNumber(final String json, int i){
         if(json == null || json.isEmpty()){
             return null;
         }
@@ -208,7 +206,7 @@ public class JsonLexer {
         return json.substring(i, j);
     }
 
-    public Boolean lexBoolean(final String json, int i){
+    public static Boolean lexBoolean(final String json, int i){
         if(i + 3 < json.length() && ("true".equals(json.substring(i, i+4).toLowerCase()))){
             return Boolean.TRUE;
         }
@@ -218,7 +216,7 @@ public class JsonLexer {
         return null;
     }
 
-    public String lexNull(final String json, int i){
+    public static String lexNull(final String json, int i){
         if(i + 3 < json.length() && "null".equalsIgnoreCase(json.substring(i, i+4))){
             return "NULL";
         }
