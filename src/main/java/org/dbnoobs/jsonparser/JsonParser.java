@@ -2,14 +2,11 @@ package org.dbnoobs.jsonparser;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
 
 public class JsonParser {
 
-    public HashMap<String, Object> parser(String json) {
+    public HashMap<String, Object> parse(String json) {
         List<JsonToken> tokens = JsonLexer.lex(json);
         Queue<JsonToken> jsonTokenQueue = new LinkedList<>(tokens);
         HashMap<String, Object> result = parseObject(jsonTokenQueue, false);
@@ -41,12 +38,11 @@ public class JsonParser {
             expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_LEFTBRACE, true);
             while(true){
 
-                boolean isRightBrace = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_COLON, false);
+                boolean isRightBrace = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_RIGHTBRACE, false);
                 if (isRightBrace) {
                     tokens.poll();
                     break;
                 }
-
 
                 String identifier = expectIdentifier(tokens);
                 expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_COLON, true);
@@ -88,7 +84,7 @@ public class JsonParser {
                 }
 
                 // expect Right brace or ( comma and object again)
-                isRightBrace = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_COLON, false);
+                isRightBrace = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_RIGHTBRACE, false);
                 if (isRightBrace) {
                     tokens.poll();
                     break;
@@ -103,8 +99,67 @@ public class JsonParser {
 
     }
 
-    private Object parseArray(Queue<JsonToken> tokens) {
-        return new Object();
+    /**
+     * array can another array or other value seperated by comma
+     * @param tokens
+     * @return
+     */
+
+    private List<Object> parseArray(Queue<JsonToken> tokens) {
+        List<Object> arr = new ArrayList<>();
+        expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_LEFTBRACKET, true);
+        while(true){
+            boolean isRightBracket = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_RIGHTBRACKET, false);
+            if(isRightBracket){
+                tokens.poll();
+                break;
+            }
+
+            boolean isLeftBrace = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_LEFTBRACE, false);
+            boolean isLeftBracket = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_LEFTBRACKET, false);
+
+            if(isLeftBrace){
+                arr.add(parseObject(tokens, true));
+            }else if(isLeftBracket){
+                arr.add(parseArray(tokens));
+            }else{
+                if(tokens.isEmpty()){
+                    throw new RuntimeException("Expected a value token but not found");
+                }
+                JsonToken token = tokens.peek();
+                if(token == null || token.getToken() == null || TokenType.CONSTANT.equals(token.getTokenType())){
+                    throw new RuntimeException("Expected a value token but not found");
+                }
+                tokens.poll();
+                if(TokenType.INT.equals(token.getTokenType())){
+                    arr.add((Integer)token.getToken());
+                }else if(TokenType.LONG.equals(token.getTokenType())){
+                    arr.add((Long)token.getToken());
+                }else if(TokenType.BIGINTEGER.equals(token.getTokenType())){
+                    arr.add((BigInteger)token.getToken());
+                }else if(TokenType.BIGDECIMAL.equals(token.getTokenType())){
+                    arr.add((BigDecimal)token.getToken());
+                }else if(TokenType.BOOLEAN.equals(token.getTokenType())){
+                    arr.add((Boolean)token.getToken());
+                }else if(TokenType.NULL.equals(token.getTokenType())){
+                    arr.add((String)token.getToken());
+                }else if(TokenType.STRING.equals(token.getTokenType())){
+                    arr.add((String)token.getToken());
+                }else{
+                    throw new RuntimeException("Expected a simple token but not found");
+                }
+            }
+
+            // expect Right brace or ( comma and object again)
+            isRightBracket = expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_RIGHTBRACKET, false);
+            if(isRightBracket){
+                tokens.poll();
+                break;
+            } else {
+                expectConstant(tokens, TokenType.CONSTANT, JsonConstants.JSON_COMMA, true);
+            }
+        }
+        return arr;
     }
 
     /**

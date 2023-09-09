@@ -1,6 +1,8 @@
 ## Simple JSON Parser in Java
 
+- This was an educational attempt to understand parsers
 - Mostly ported from Eaton Phil's [JsonParser](https://github.com/eatonphil/pj/tree/master) written in go.
 - Added some extra logic to improve number detection
+- Very scrappy code, could improve a lot of things especially the exceptional handling.
 
-Credits: [eatonphil](https://github.com/eatonphil)
+## Thanks and Credits : [eatonphil](https://github.com/eatonphil)
