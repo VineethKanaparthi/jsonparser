@@ -7,7 +7,7 @@ import java.util.*;
 public class JsonParser {
 
     public HashMap<String, Object> parse(String json) {
-        List<JsonToken> tokens = JsonLexer.lex(json);
+        List<JsonToken> tokens = new JsonLexer().lex(json);
         Queue<JsonToken> jsonTokenQueue = new LinkedList<>(tokens);
         HashMap<String, Object> result = parseObject(jsonTokenQueue, false);
         if(jsonTokenQueue.isEmpty()){
@@ -168,17 +168,6 @@ public class JsonParser {
      * @return
      */
 
-    private Object extractValue(Queue<JsonToken> tokens) {
-        if(tokens.isEmpty()){
-            throw new RuntimeException("Expected a value token but not found");
-        }
-        JsonToken token = tokens.poll();
-        if(token == null || token.getToken() == null || TokenType.CONSTANT.equals(token.getTokenType())){
-            throw new RuntimeException("Expected a value token but not found");
-        }
-        return token.getToken();
-    }
-
     private String expectIdentifier(Queue<JsonToken> tokens) {
         if(tokens.isEmpty()){
             throw new RuntimeException("Expected identifier but Not Enough Tokens present");
@@ -202,7 +191,7 @@ public class JsonParser {
         if (!((jsonToken != null && jsonToken.getToken() != null) && expectedTokentype.equals(jsonToken.getTokenType())
                 && expectedValue.equals(jsonToken.getToken()))) {
             if (enforce) {
-                throw new RuntimeException(String.format("Expected constant {} but not found", expectedValue));
+                throw new RuntimeException(String.format("Expected constant %s but not found", expectedValue));
             }
             return false;
         }

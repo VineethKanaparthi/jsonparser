@@ -3,132 +3,84 @@ package org.dbnoobs.jsonparser;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class JsonLexer {
 
-    public static List<JsonToken> lex(String json) {
+    public List<JsonToken> lex(String json) {
         int len = json.length();
-        int i = 0;
+        Cursor cursor = new Cursor(0, new Location(1, 0));
         List<JsonToken> tokens = new ArrayList<>();
-        while(i < len){
-            String token = lexString(json, i);
-            if(token != null) {
-                i += (token.length()+2);
-                tokens.add(JsonToken.getToken(token, TokenType.STRING));
-                continue;
-            }
-            token = lexNumber(json, i);
-            JsonToken extractedNumber = convertToNumber(token);
-            if(extractedNumber != null) {
-                i += (token.length());
-                tokens.add(extractedNumber);
-                continue;
-            }
-            Boolean extractedBoolean = lexBoolean(json, i);
-            if(extractedBoolean != null) {
-                i += ((extractedBoolean)?4:5);
-                tokens.add(JsonToken.getToken(extractedBoolean, TokenType.BOOLEAN));
-                continue;
-            }
-            token = lexNull(json, i);
-            if(token != null) {
-                i += (token.length());
-                tokens.add(JsonToken.getToken(token, TokenType.NULL));
-                continue;
-            }
+        List<LexerFunction> lexers = Arrays.asList(this::lexString, this::lexNumeric, this::lexBoolean, this::lexNull,
+                this::lexWhiteSpace, this::lexSyntax);
 
-            boolean isWhiteSpace = false;
-
-            for(char c: JsonConstants.JSON_WHITESPACE){
-                if(c == json.charAt(i)){
-                    isWhiteSpace = true;
+        while(cursor.getPointer() < len){
+            boolean tokenFound = false;
+            for(LexerFunction lexerFunction: lexers){
+                JsonToken token = lexerFunction.apply(json, cursor);
+                if(token != null){
+                    if(!TokenType.WHITESPACE.equals(token.getTokenType())){
+                        tokens.add(token);
+                    }
+                    tokenFound = true;
                     break;
                 }
             }
-
-            if(isWhiteSpace){
-                i++;
-                continue;
+            if(!tokenFound){
+                Object lastToken = (tokens.size() > 0)?tokens.get(tokens.size()-1).getToken(): "";
+                throw new RuntimeException(String.format("Unable to lex after token %s, at line: %d col: %d", lastToken, cursor.getLocation().getLine(), cursor.getLocation().getCol()));
             }
-
-            boolean isJsonSyntax = false;
-
-            for(char c: JsonConstants.JSON_SYNTAX){
-                if(c == json.charAt(i)){
-                    isJsonSyntax = true;
-                    tokens.add(JsonToken.getToken(c, TokenType.CONSTANT));
-                    break;
-                }
-            }
-
-            if(isJsonSyntax){
-                i++;
-                continue;
-            }
-            throw new RuntimeException("Token unrecognized in json string at index: " + i);
         }
         return tokens;
     }
 
-    public static JsonToken convertToNumber(String token) {
-        if(token == null || token.isEmpty()){
-            return null;
-        }
-        boolean periodExists = false;
-        boolean exponentExists = false;
-        for(int i=0;i<token.length();i++){
-            if(token.charAt(i) == '.'){
-                periodExists = true;
-                continue;
-            }
-            if(token.charAt(i) == 'e'){
-                exponentExists = true;
+    private JsonToken lexSyntax(String json, Cursor cursor) {
+        for(char c: JsonConstants.JSON_SYNTAX){
+            if(c == json.charAt(cursor.getPointer())){
+                Location tokenLocation = new Location(cursor.getLocation());
+                cursor.increment();
+                return new JsonToken(c, TokenType.CONSTANT, tokenLocation);
             }
         }
-        try{
-            if(periodExists){
-                return JsonToken.getToken(new BigDecimal(token),TokenType.BIGDECIMAL) ;
-            }else if(exponentExists) {
-                try{
-                    return JsonToken.getToken(new BigDecimal(token).longValueExact(), TokenType.LONG);
-                }catch (Exception e1){
-                    try{
-                        return JsonToken.getToken(new BigDecimal(token).toBigIntegerExact(), TokenType.BIGINTEGER);
-                    }catch (Exception e2){
-                            return JsonToken.getToken(new BigDecimal(token), TokenType.BIGDECIMAL);
-                    }
-                }
-            }else{
-                try{
-                    return JsonToken.getToken(Integer.parseInt(token), TokenType.INT);
-                }catch (Exception e1){
-                    try{
-                        return JsonToken.getToken(Long.parseLong(token), TokenType.LONG);
-                    }catch (Exception e2){
-                        return JsonToken.getToken(new BigInteger(token), TokenType.BIGINTEGER);
-                    }
-                }
-            }
-        }catch (Exception e3){
-            return null;
-        }
+        return null;
     }
 
-    private static String lexString(final String json, int i){
-        if(json == null || json.isEmpty() || json.charAt(i) != JsonConstants.JSON_QUOTE) {
+    private JsonToken lexWhiteSpace(String json, Cursor cursor) {
+        for(char c: JsonConstants.JSON_WHITESPACE){
+            if(c == json.charAt(cursor.getPointer())){
+                Location tokenLocation = new Location(cursor.getLocation());
+                if(c == '\n'){
+                    cursor.incrementLine();
+                }else{
+                    cursor.increment();
+                }
+                return new JsonToken(c, TokenType.WHITESPACE, tokenLocation);
+            }
+        }
+        return null;
+    }
+
+    public JsonToken lexString(final String json, Cursor inputCursor){
+        Cursor cursor = new Cursor(inputCursor);
+        if(json == null || json.isEmpty() || json.charAt(cursor.getPointer()) != JsonConstants.JSON_QUOTE) {
             return null;
         }
-        i++;
-        int j = i;
-        while(j < json.length()){
-            if(json.charAt(j) == JsonConstants.JSON_QUOTE){
-                return json.substring(i, j);
-            }
-            j++;
-        }
-        throw new RuntimeException("Expected end of quotes");
+        // skip the quotes
+        cursor.increment();
+        // start of string
 
+        while(cursor.getPointer() < json.length()){
+            if(json.charAt(cursor.getPointer()) == JsonConstants.JSON_QUOTE){
+                Location tokenLocation = new Location(inputCursor.getLocation());
+                String value = json.substring(inputCursor.getPointer()+1, cursor.getPointer());
+                cursor.increment();
+                inputCursor.modify(cursor);
+                return new JsonToken(value, TokenType.STRING, tokenLocation);
+            }
+            cursor.increment();
+        }
+        throw new RuntimeException(String.format("Expected end of quotes for token starting at: %d", inputCursor.getPointer()));
     }
 
     /**
@@ -144,25 +96,25 @@ public class JsonLexer {
      * At least one digit should follow an exponent marker after an optional sign
      *
      * @param json - Input json string
-     * @param i - index of the string to start lexing
+     * @param inputCursor - index, @Location of the string to start lexing
      * @return token(substring of json string) that is a number defined by postgres doc
      */
-    public static String lexNumber(final String json, int i){
+    public JsonToken lexNumeric(final String json, Cursor inputCursor){
         if(json == null || json.isEmpty()){
             return null;
         }
-        int j = i;
-        char firstChar = json.charAt(j);
+        Cursor cursor = new Cursor(inputCursor);
+        char firstChar = json.charAt(cursor.getPointer());
         // skip the first character if it's a sign
         if(firstChar == '+' || firstChar == '-'){
-            j++;
+            cursor.increment();
         }
         boolean periodExists = false;
         boolean exponentExists = false;
         boolean atLeastOneDigitExists = false;
 
-        while(j < json.length()){
-            char c = json.charAt(j);
+        while(cursor.getPointer() < json.length()){
+            char c = json.charAt(cursor.getPointer());
             boolean isDigit = Character.isDigit(c);
             boolean isExpMarker = (c=='e');
             boolean isPeriod = (c=='.');
@@ -181,44 +133,82 @@ public class JsonLexer {
                     return null;
                 }
                 // at least 1 digit should follow after exponent
-                j++;
+                cursor.increment();
                 // if next is a sign skip it
-                if(j < json.length()){
-                    char next = json.charAt(j);
+                if(cursor.getPointer() < json.length()){
+                    char next = json.charAt(cursor.getPointer());
                     if(next == '+' || next == '-'){
-                        j++;
+                        cursor.increment();
                     }
                 }else{
                     return null;
                 }
                 // if next is not a digit return null
-                if(j >= json.length() || !Character.isDigit(json.charAt(j))){
+                if(cursor.getPointer() >= json.length() || !Character.isDigit(json.charAt(cursor.getPointer()))){
                         return null;
                 }
             }else{
                break;
             }
-            j++;
+            cursor.increment();
         }
         if(!atLeastOneDigitExists){
             return null;
         }
-        return json.substring(i, j);
+
+        String token = json.substring(inputCursor.getPointer(), cursor.getPointer());
+        Location tokenLocation = new Location(inputCursor.getLocation());
+        inputCursor.modify(cursor);
+        try{
+            if(periodExists){
+                return JsonToken.getToken(new BigDecimal(token), TokenType.BIGDECIMAL, tokenLocation) ;
+            }else if(exponentExists) {
+                try{
+                    return JsonToken.getToken(new BigDecimal(token).longValueExact(), TokenType.LONG, tokenLocation);
+                }catch (Exception e1){
+                    try{
+                        return JsonToken.getToken(new BigDecimal(token).toBigIntegerExact(), TokenType.BIGINTEGER, tokenLocation);
+                    }catch (Exception e2){
+                        return JsonToken.getToken(new BigDecimal(token), TokenType.BIGDECIMAL, tokenLocation);
+                    }
+                }
+            }else{
+                try{
+                    return JsonToken.getToken(Integer.parseInt(token), TokenType.INT, tokenLocation);
+                }catch (Exception e1){
+                    try{
+                        return JsonToken.getToken(Long.parseLong(token), TokenType.LONG, tokenLocation);
+                    }catch (Exception e2){
+                        return JsonToken.getToken(new BigInteger(token), TokenType.BIGINTEGER, tokenLocation);
+                    }
+                }
+            }
+        }catch (Exception e3){
+            return null;
+        }
     }
 
-    public static Boolean lexBoolean(final String json, int i){
-        if(i + 3 < json.length() && ("true".equals(json.substring(i, i+4).toLowerCase()))){
-            return Boolean.TRUE;
+    public JsonToken lexBoolean(final String json, Cursor cursor){
+        int i = cursor.getPointer();
+        if( i + 3 < json.length() && ("true".equals(json.substring(i, i+4).toLowerCase()))){
+            Location tokenLocation = new Location(cursor.getLocation());
+            cursor.increment(4);
+            return JsonToken.getToken(Boolean.TRUE, TokenType.BOOLEAN, tokenLocation);
         }
         if(i + 4 < json.length() && ("false".equals(json.substring(i, i+5).toLowerCase()))){
-            return Boolean.FALSE;
+            Location tokenLocation = new Location(cursor.getLocation());
+            cursor.increment(5);
+            return JsonToken.getToken(Boolean.FALSE, TokenType.BOOLEAN, tokenLocation);
         }
         return null;
     }
 
-    public static String lexNull(final String json, int i){
+    public JsonToken lexNull(final String json, Cursor cursor){
+        int i = cursor.getPointer();
         if(i + 3 < json.length() && "null".equalsIgnoreCase(json.substring(i, i+4))){
-            return "NULL";
+            Location tokenLocation = new Location(cursor.getLocation());
+            cursor.increment(i+4);
+            return JsonToken.getToken("NULL", TokenType.NULL, tokenLocation);
         }
         return null;
     }

@@ -8,5 +8,7 @@ public enum TokenType {
     BIGDECIMAL,
     BOOLEAN,
     NULL,
-    CONSTANT
+    CONSTANT,
+
+    WHITESPACE
 }
