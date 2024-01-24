@@ -10,15 +10,6 @@ This project is a Java-based JSON parser, aiming to provide a comprehensive unde
     - [Whitespaces, Symbols, Strings, Numerics, and Identifiers](#whitespaces-symbols-strings-numerics-and-identifiers)
 2. [JsonParser](#jsonparser)
     - [Object and Array Parsing](#object-and-array-parsing)
-    - [Integration with SQL Parsing](#integration-with-sql-parsing)
-3. [Usage](#usage)
-    - [Parsing JSON](#parsing-json)
-    - [Extending for SQL Parsing](#extending-for-sql-parsing)
-4. [Learning Journey](#learning-journey)
-    - [Challenges and Solutions](#challenges-and-solutions)
-    - [Future Enhancements](#future-enhancements)
-5. [Contributing](#contributing)
-6. [License](#license)
 
 ## Lexer
 
